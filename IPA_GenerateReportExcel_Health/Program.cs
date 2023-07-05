@@ -29,7 +29,7 @@ namespace IPA_GenerateReportExcel_Health
                 conn.Open();
                 var guidId = Guid.NewGuid().ToString();
                 WriteLogHeader(guidId, fileName);
-                WriteLogSystem("==> "+ guidId + " DB Connected", fileLog);
+                WriteLogSystem("==> "+ guidId.ToUpper() + " DB Connected", fileLog);
                 var config = new ConfigModel();
 
                 using (SqlCommand command = new SqlCommand("SpIPAGetConfig", conn))
@@ -75,6 +75,7 @@ namespace IPA_GenerateReportExcel_Health
                         }
                         else
                         {
+                            WriteLogDetail("2", "FTP", "1", "Config Not Send SFTP File", guidId);
                             WriteLogSystem("==> Config Not Send SFTP File.", fileLog);
                         }
                         #endregion
@@ -101,6 +102,7 @@ namespace IPA_GenerateReportExcel_Health
                         }
                         else
                         {
+                            WriteLogDetail("3", "Send Mail", "1", "Config Not Send Mail", guidId);
                             WriteLogSystem("==> Config Not Send Mail.", fileLog);
                         }
                         #endregion
@@ -229,7 +231,6 @@ namespace IPA_GenerateReportExcel_Health
             {
                 using (StreamWriter w = File.CreateText(PathfileLog))
                 {
-                    w.WriteLine($"###############################################");
                     w.WriteLine($"{DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss")}");
                     w.WriteLine($"{logMessage}");
                 }
@@ -285,7 +286,9 @@ namespace IPA_GenerateReportExcel_Health
         }
         public static void WriteLogDetail(string sequence, string strEvent, string statusCode, string message, string guid)
         {
-            string sql = @"Insert into [LogDetail]
+            try
+            {
+                string sql = @"Insert into [LogDetail]
                               ([Id]
                               ,[Sequence]
                               ,[Event]
@@ -294,26 +297,34 @@ namespace IPA_GenerateReportExcel_Health
                               ,[CreateDate]
                               ,[Log_Id]) VALUES (NEWID(), @Sequence, @Event, @StatusCode, @Message, @CreateDate, @Log_Id)";
 
-            SqlParameter[] param = new SqlParameter[]
-            {
+                SqlParameter[] param = new SqlParameter[]
+                {
                 new SqlParameter("@Sequence", sequence),
                 new SqlParameter("@Event", string.IsNullOrEmpty(strEvent) ? string.Empty : strEvent),
                 new SqlParameter("@StatusCode", string.IsNullOrEmpty(statusCode) ? string.Empty : statusCode),
                 new SqlParameter("@Message", string.IsNullOrEmpty(message) ? string.Empty : message),
                 new SqlParameter("@CreateDate", DateTime.Now),
                 new SqlParameter("@Log_Id", guid)
-            };
+                };
 
-            using (connection = new SqlConnection(Configulation.Db_Log))
-            {
-                connection.Open();
-                using (SqlCommand command = new SqlCommand(sql, connection))
+                using (connection = new SqlConnection(Configulation.Db_Log))
                 {
-                    command.CommandType = System.Data.CommandType.Text;
-                    command.Parameters.AddRange(param);
-                    command.ExecuteNonQuery();
+                    connection.Open();
+                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    {
+                        command.CommandType = System.Data.CommandType.Text;
+                        command.Parameters.AddRange(param);
+                        command.ExecuteNonQuery();
+                    }
+                    connection.Close();
                 }
-                connection.Close();
+            }
+            finally
+            {
+                if (connection != null && connection.State == ConnectionState.Open)
+                {
+                    connection.Close();
+                }
             }
         }
         public static ConfigModel MappingDatatableToMoel(DataTable dt)
