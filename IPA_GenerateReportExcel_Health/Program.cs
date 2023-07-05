@@ -6,13 +6,16 @@ using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
+using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
+using System.Threading.Tasks;
 
 namespace IPA_GenerateReportExcel_Health
 {
     class Program
     {
+        static SqlConnection connection;
         static void Main(string[] args)
         {
             var fileLog = string.Format(".//Log//Health_{0:ddMMyyyy}_log.txt", DateTime.Now);
@@ -25,6 +28,7 @@ namespace IPA_GenerateReportExcel_Health
                 //Open Connection
                 conn.Open();
                 var guidId = Guid.NewGuid().ToString();
+                WriteLogHeader(guidId, fileName);
                 WriteLogSystem("==> "+ guidId + " DB Connected", fileLog);
                 var config = new ConfigModel();
 
@@ -44,14 +48,14 @@ namespace IPA_GenerateReportExcel_Health
                         dtExcel = dataSet.Tables[1];
                     }
 
-                    var resultGen = GenerateExcel(dtExcel, config.ExcelFilePath + fileName);
+                    var resultGen = GenerateExcel(dtExcel, config.ExcelFilePath + fileName, guidId);
 
                     config = MappingDatatableToMoel(dtConfig);
 
                     if (resultGen)
                     {
                         WriteLogSystem("==> Generate File Excel Completed.", fileLog);
-
+                        WriteLogDetail("1", "Gen Excel", "1", "Gen Excel File Successful", guidId);
                         #region Upload SFTP
                         var SFTPConfig = new SFTPConfigModel();
                         SFTPConfig.Host = config.UplaodHost;
@@ -62,10 +66,11 @@ namespace IPA_GenerateReportExcel_Health
                         SFTPConfig.FileDirectory = config.UplaodDirectory;
                         SFTPConfig.FileToUpload = config.UplaodFilePath;
 
-                        var resultUplod = Upload(SFTPConfig);
+                        var resultUplod = Upload(SFTPConfig, guidId);
 
                         if (resultUplod)
                         {
+                            WriteLogDetail("2", "FTP", "1", "Upload FTP File Successful", guidId);
                             WriteLogSystem("==> Send SFTP File Completed.", fileLog);
                         }
                         else
@@ -87,9 +92,10 @@ namespace IPA_GenerateReportExcel_Health
                             mailConfig.Body = config.MailBody;
                             mailConfig.Attachment = config.ExcelFilePath + fileName;
                             mailConfig.Smtp = config.MailSmtp;
-                            var resultMail = SendMail(mailConfig);
+                            var resultMail = SendMail(mailConfig, guidId);
                             if (resultMail)
                             {
+                                WriteLogDetail("3", "Send Mail", "1", "Send Mail Successful", guidId);
                                 WriteLogSystem("==> Send Mail Completed.", fileLog);
                             }
                         }
@@ -112,7 +118,7 @@ namespace IPA_GenerateReportExcel_Health
                 WriteLogSystem(ex.Message, fileLog);
             }
         }
-        public static bool GenerateExcel(DataTable dt, string filePath)
+        public static bool GenerateExcel(DataTable dt, string filePath, string guid)
         {
             try
             {
@@ -144,6 +150,7 @@ namespace IPA_GenerateReportExcel_Health
             }
             catch (Exception ex)
             {
+                WriteLogDetail("1", "Gen Excel", "0", ex.Message, guid);
                 throw ex;
             }
         }
@@ -151,8 +158,9 @@ namespace IPA_GenerateReportExcel_Health
         {
             public static string Db_r4ad01 = ConfigurationManager.AppSettings["Db_r4ad01"].ToString();
             public static string Type = ConfigurationManager.AppSettings["Type"].ToString();
+            public static string Db_Log = ConfigurationManager.AppSettings["Db_Log"].ToString();
         };
-        public static bool SendMail(MailConfigModel mailConfig)
+        public static bool SendMail(MailConfigModel mailConfig, string guid)
         {
             MailAddress to = new MailAddress(mailConfig.MailTo);
             MailAddress from = new MailAddress(mailConfig.MailFrom);
@@ -177,10 +185,11 @@ namespace IPA_GenerateReportExcel_Health
             }
             catch (SmtpException ex)
             {
+                WriteLogDetail("3", "Send Mail", "0", ex.Message, guid);
                 throw ex;
             }
         }
-        public static bool Upload(SFTPConfigModel SFTPConfig)
+        public static bool Upload(SFTPConfigModel SFTPConfig, string guid)
         {
             try
             {
@@ -210,6 +219,7 @@ namespace IPA_GenerateReportExcel_Health
             }
             catch (Exception ex)
             {
+                WriteLogDetail("2", "FTP", "0", ex.Message, guid);
                 throw ex;
             }
         }
@@ -232,13 +242,79 @@ namespace IPA_GenerateReportExcel_Health
                 }
             }
         }
-        public static void WriteLogHeader(string logMessage, string PathfileLog)
+        public static void WriteLogHeader(string guid, string fileName)
         {
+            try
+            {
+                string sql = @"Insert into [Log]([Id],[IPaddress],[ApiOperation],[CreateDate],[ReferenceCode])
+                                      VALUES(@Id, @IPaddress, @ApiOperation, @CreateDate, @ReferenceCode)";
+
+                IPHostEntry ip = Dns.GetHostEntry(Dns.GetHostName());
+                var ipAddress = ip.AddressList[0].ToString().Length > 15 ? ip.AddressList[1].ToString() : ip.AddressList[0].ToString();
+                var ipAdd = ipAddress.Length > 15 ? string.Empty : ipAddress;
+
+                SqlParameter[] param = new SqlParameter[]
+                {
+                    new SqlParameter("@Id", string.IsNullOrEmpty(guid) ? string.Empty : guid),
+                    new SqlParameter("@IPaddress", string.IsNullOrEmpty(ipAdd) ? string.Empty : ipAdd),
+                    new SqlParameter("@ApiOperation", "IPA_GenerateReportExcel_Health"),
+                    new SqlParameter("@CreateDate", DateTime.Now),
+                    new SqlParameter("@ReferenceCode", string.IsNullOrEmpty(fileName) ? string.Empty : fileName)
+                };
+
+                using (connection = new SqlConnection(Configulation.Db_Log))
+                {
+                    connection.Open();
+                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    {
+                        command.CommandType = System.Data.CommandType.Text;
+                        command.Parameters.AddRange(param);
+                        command.ExecuteNonQuery();
+                    }
+                    connection.Close();
+                }
+            }
+            finally
+            {
+                if (connection != null && connection.State == ConnectionState.Open)
+                {
+                    connection.Close();
+                }
+            }
             
         }
-        public static void WriteLogDetail(string logMessage, string PathfileLog)
+        public static void WriteLogDetail(string sequence, string strEvent, string statusCode, string message, string guid)
         {
+            string sql = @"Insert into [LogDetail]
+                              ([Id]
+                              ,[Sequence]
+                              ,[Event]
+                              ,[StatusCode]
+                              ,[Message]
+                              ,[CreateDate]
+                              ,[Log_Id]) VALUES (NEWID(), @Sequence, @Event, @StatusCode, @Message, @CreateDate, @Log_Id)";
 
+            SqlParameter[] param = new SqlParameter[]
+            {
+                new SqlParameter("@Sequence", sequence),
+                new SqlParameter("@Event", string.IsNullOrEmpty(strEvent) ? string.Empty : strEvent),
+                new SqlParameter("@StatusCode", string.IsNullOrEmpty(statusCode) ? string.Empty : statusCode),
+                new SqlParameter("@Message", string.IsNullOrEmpty(message) ? string.Empty : message),
+                new SqlParameter("@CreateDate", DateTime.Now),
+                new SqlParameter("@Log_Id", guid)
+            };
+
+            using (connection = new SqlConnection(Configulation.Db_Log))
+            {
+                connection.Open();
+                using (SqlCommand command = new SqlCommand(sql, connection))
+                {
+                    command.CommandType = System.Data.CommandType.Text;
+                    command.Parameters.AddRange(param);
+                    command.ExecuteNonQuery();
+                }
+                connection.Close();
+            }
         }
         public static ConfigModel MappingDatatableToMoel(DataTable dt)
         {
