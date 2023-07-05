@@ -258,7 +258,7 @@ namespace IPA_GenerateReportExcel_Health
                 {
                     new SqlParameter("@Id", string.IsNullOrEmpty(guid) ? string.Empty : guid),
                     new SqlParameter("@IPaddress", string.IsNullOrEmpty(ipAdd) ? string.Empty : ipAdd),
-                    new SqlParameter("@ApiOperation", "IPA_GenerateReportExcel_Health"),
+                    new SqlParameter("@ApiOperation", "IPA_GenerateReportExcel_" + Configulation.Type.ToString()),
                     new SqlParameter("@CreateDate", DateTime.Now),
                     new SqlParameter("@ReferenceCode", string.IsNullOrEmpty(fileName) ? string.Empty : fileName)
                 };
