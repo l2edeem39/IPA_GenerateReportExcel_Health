@@ -9,7 +9,6 @@ namespace IPA_GenerateReportExcel_Health.Models
     public class ConfigModel
     {
        public string ExcelFilePath { get; set; }
-       public string LogFilePath { get; set; }
        public string MailBody { get; set; }
        public string MailCc { get; set; }
        public string MailFrom { get; set; }

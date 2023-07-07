@@ -155,9 +155,9 @@ namespace IPA_GenerateReportExcel_Health
                 var worksheet_last = workbook_last.Worksheets.ActiveWorksheet;
 
                 int columnCount = worksheet_last.CalculateMaxUsedColumns();
-                for (int i = 0; i < columnCount; i++)
+                for (int i = 0; i <= columnCount; i++)
                 {
-                    worksheet_last.Columns[i].AutoFit(1, worksheet_last.Rows[1], worksheet_last.Rows[worksheet_last.Rows.Count - 1]);
+                    worksheet_last.Columns[i].AutoFit(1, worksheet_last.Rows[1], worksheet_last.Rows[worksheet_last.Rows.Count]);
                 }
 
                 workbook_last.Save(filePath);
@@ -349,7 +349,6 @@ namespace IPA_GenerateReportExcel_Health
             {
                 DataRow rowHead = dt.Rows[0];
                 result.ExcelFilePath = rowHead["ExcelFilePath"] != null ? (string)rowHead["ExcelFilePath"].ToString() : string.Empty;
-                result.LogFilePath = rowHead["LogFilePath"] != null ? (string)rowHead["LogFilePath"].ToString() : string.Empty;
                 result.MailBody = rowHead["MailBody"] != null ? (string)rowHead["MailBody"].ToString() : string.Empty;
                 result.MailCc = rowHead["MailCc"] != null ? (string)rowHead["MailCc"].ToString() : string.Empty;
                 result.MailFrom = rowHead["MailFrom"] != null ? (string)rowHead["MailFrom"].ToString() : string.Empty;
