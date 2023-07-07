@@ -18,11 +18,24 @@ namespace IPA_GenerateReportExcel_Health
         static SqlConnection connection;
         static void Main(string[] args)
         {
+            string folderLog = ".//Log";
+            // If directory does not exist, create it
+            if (!Directory.Exists(folderLog))
+            {
+                Directory.CreateDirectory(folderLog);
+            }
+            string folderExcel = ".//FileExcel";
+            // If directory does not exist, create it
+            if (!Directory.Exists(folderExcel))
+            {
+                Directory.CreateDirectory(folderExcel);
+            }
+
             var fileLog = string.Format(".//Log//Health_{0:ddMMyyyy}_log.txt", DateTime.Now);
+            var fileName = string.Format("Health_{0:ddMMyyyy_HHmm}.xlsx", DateTime.Now);
             WriteLogSystem("Start Process =>", fileLog);
             try
             {
-                var fileName = string.Format("Health_{0:ddMMyyyy_hhmm}.xlsx", DateTime.Now);
                 var conn = new SqlConnection(Configulation.Db_r4ad01.ToString().Trim());
 
                 //Open Connection
@@ -32,7 +45,7 @@ namespace IPA_GenerateReportExcel_Health
                 WriteLogSystem("==> "+ guidId.ToUpper() + " DB Connected", fileLog);
                 var config = new ConfigModel();
 
-                using (SqlCommand command = new SqlCommand("SpIPAGetConfig", conn))
+                using (SqlCommand command = new SqlCommand("sp_IPA_GetConfig", conn))
                 {
                     command.Parameters.AddWithValue("@subject", Configulation.Type);
                     command.CommandType = System.Data.CommandType.StoredProcedure;
@@ -47,10 +60,9 @@ namespace IPA_GenerateReportExcel_Health
                         dtConfig = dataSet.Tables[0];
                         dtExcel = dataSet.Tables[1];
                     }
+                    config = MappingDatatableToMoel(dtConfig);
 
                     var resultGen = GenerateExcel(dtExcel, config.ExcelFilePath + fileName, guidId);
-
-                    config = MappingDatatableToMoel(dtConfig);
 
                     if (resultGen)
                     {
@@ -66,7 +78,7 @@ namespace IPA_GenerateReportExcel_Health
                         SFTPConfig.FileDirectory = config.UplaodDirectory;
                         SFTPConfig.FileToUpload = config.UplaodFilePath;
 
-                        var resultUplod = Upload(SFTPConfig, guidId);
+                        var resultUplod = Upload(SFTPConfig, guidId, fileName, fileLog);
 
                         if (resultUplod)
                         {
@@ -119,6 +131,8 @@ namespace IPA_GenerateReportExcel_Health
             {
                 WriteLogSystem(ex.Message, fileLog);
             }
+            //File.Delete(".//" + fileName);
+            File.Delete(".//FileExcel//DataExcel.xlsx");
         }
         public static bool GenerateExcel(DataTable dt, string filePath, string guid)
         {
@@ -191,23 +205,24 @@ namespace IPA_GenerateReportExcel_Health
                 throw ex;
             }
         }
-        public static bool Upload(SFTPConfigModel SFTPConfig, string guid)
+        public static bool Upload(SFTPConfigModel SFTPConfig, string guid, string fileName, string PathfileLog)
         {
             try
             {
                 if (SFTPConfig.Status == "1")
                 {
                     using (var sftpClient = new SftpClient(SFTPConfig.Host, Int32.Parse(SFTPConfig.Port), SFTPConfig.Username, SFTPConfig.Password))
-                    using (var fs = new FileStream(SFTPConfig.FileToUpload, FileMode.Open))
+                    using (var fs = new FileStream(SFTPConfig.FileToUpload+ fileName, FileMode.Open))
                     {
                         sftpClient.Connect();
                         sftpClient.ChangeDirectory(SFTPConfig.FileDirectory);
                         //sftpClient.UploadFile(
                         //    fs,
-                        //    "/ftproot/" + Path.GetFileName(fileToUpload),
+                        //    SFTPConfig.FileToUpload + fileName,
                         //    uploaded =>
                         //    {
-                        //        Console.WriteLine($"Uploaded {(double)uploaded / fs.Length * 100}% of the file.");
+                        //        WriteLogSystem("Uploaded Completed.", PathfileLog);
+                        //        //Console.WriteLine($"Uploaded {(double)uploaded / fs.Length * 100}% of the file.");
                         //    });
 
                         sftpClient.Disconnect();
